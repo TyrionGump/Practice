@@ -15,7 +15,9 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.event.*;
+import java.io.IOException;
 import java.net.InetAddress;
+import java.net.Socket;
 import java.net.UnknownHostException;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -205,7 +207,28 @@ public class WhiteboardApp {
         this.whiteboardServerPort = whiteboardServerPort;
         this.whiteboardServerHost = whiteboardServerHost;
 
+
+//        boolean ifAttemptToConnectServer = false;
+//        Socket attemptSocket;
+
+
+
         peerManager = new PeerManager(peerPort);
+//        try {
+//            attemptSocket = new Socket(InetAddress.getByName(whiteboardServerHost),whiteboardServerPort);
+//            Endpoint endpoint = new Endpoint(attemptSocket, peerManager);
+////            endpoint.start();
+//            ifAttemptToConnectServer = true;
+////            endpoint.interrupt();
+//        } catch (UnknownHostException e) {
+//        } catch (IOException e) {
+//            ifAttemptToConnectServer = false;
+//        }
+
+
+//        if (!ifAttemptToConnectServer) {
+//            show(peerport);
+//        } else {
         peerport = whiteboardServerHost + ":" + peerPort;
         show(peerport);
 
@@ -221,70 +244,51 @@ public class WhiteboardApp {
 
         peerManager.on(PeerManager.peerStarted, (args) -> {
             Endpoint endpoint = (Endpoint) args[0];
-            log.info("Conncection from peer: " + endpoint.getOtherEndpointId());
+            log.info("Connection from peer: " + endpoint.getOtherEndpointId());
             peerInformation.put(endpoint.getOtherEndpointId(), endpoint);
 
             endpoint.on(getBoardData, (args2) -> {
                 String RequestedBoard = getBoardName((String) args2[0]);
+                log.info("onGetBoard: " + RequestedBoard);
+                log.info("onBoardListen: " + RequestedBoard);
                 endpoint.emit(boardData, whiteboards.get(RequestedBoard).toString());
-            }).on(boardUndoAccepted, (args2) -> {
-                log.info("发送方听到undo");
-                String newBoardData = (String) args2[0];
-                log.info("-" + getBoardVersion(whiteboards.get(getBoardName(newBoardData)).toString()));
-                log.info(whiteboards.get(getBoardName(newBoardData)).toString());
-                log.info("-" + getBoardVersion(newBoardData));
-                log.info(newBoardData);
-                if (getBoardVersion(whiteboards.get(getBoardName(newBoardData)).toString()) == getBoardVersion(newBoardData)) {
-                    log.info("发送方真撤回了");
-                    whiteboards.get(getBoardName(newBoardData)).undo(whiteboards.get(getBoardName(newBoardData)).getVersion());
-                    log.info(whiteboards.get(getBoardName(newBoardData)).toString());
-                    updateComboBox(false ? getBoardName(newBoardData) : null);
 
+            }).on(boardUndoAccepted, (args2) -> {
+                String newBoardData = (String) args2[0];
+                if (getBoardVersion(whiteboards.get(getBoardName(newBoardData)).toString()) == getBoardVersion(newBoardData)) {
+                    log.info("onBoardUndo" + getBoardName(whiteboards.get(getBoardName(newBoardData)).toString()) + "%" + getBoardVersion(whiteboards.get(getBoardName(newBoardData)).toString()));
+                    whiteboards.get(getBoardName(newBoardData)).undo(whiteboards.get(getBoardName(newBoardData)).getVersion());
+                    updateComboBox(false ? getBoardName(newBoardData) : null);
                     for (String key : peerInformation.keySet()) {
                         if (!key.equals(endpoint.getOtherEndpointId())) {
-                            log.info("发送方接力把撤销传递");
-                            log.info(peerInformation.get(key).getClass().toString());
-                            log.info(peerInformation.get(key).getOtherEndpointId());
                             peerInformation.get(key).emit(boardUndoUpdate, newBoardData);
                         }
                     }
                 }
 
             }).on(boardClearAccepted, (args2) -> {
-                log.info("听到Clear");
                 String newBoardData = (String) args2[0];
                 if (getBoardVersion(whiteboards.get(getBoardName(newBoardData)).toString()) == getBoardVersion(newBoardData)) {
+                    log.info("Clear board: " + getBoardName(newBoardData));
                     whiteboards.get(getBoardName(newBoardData)).clear(whiteboards.get(getBoardName(newBoardData)).getVersion());
                     updateComboBox(false ? getBoardName(newBoardData) : null);
-
                     for (String key : peerInformation.keySet()) {
                         if (!key.equals(endpoint.getOtherEndpointId())) {
-                            log.info("接收方接力把清楚传递");
-                            log.info(peerInformation.get(key).getClass().toString());
-                            log.info(peerInformation.get(key).getOtherEndpointId());
                             peerInformation.get(key).emit(boardClearUpdate,newBoardData);
                         }
                     }
                 }
 
-
             }).on(boardPathAccepted, (args2) -> {
-                log.info("发送方收到更新");
                 String newBoardData = (String) args2[0];
                 WhiteboardPath newWhiteboardPath = new WhiteboardPath(getBoardNewPath(newBoardData));
-                log.info(newWhiteboardPath.toString());
-                log.info("+++" + getBoardVersion(whiteboards.get(getBoardName(newBoardData)).toString()));
-                log.info("+++" + getBoardVersion(newBoardData));
                 if (getBoardVersion(whiteboards.get(getBoardName(newBoardData)).toString()) != getBoardVersion(newBoardData)) {
-                    log.info("发送方收到更新真的更新了board");
+                    log.info("onBoardPath: " + getBoardNewPath(newBoardData));
                     whiteboards.get(getBoardName(newBoardData)).addPath(newWhiteboardPath, whiteboards.get(getBoardName(newBoardData)).getVersion());
                     updateComboBox(false ? getBoardName(newBoardData) : null);
 
                     for (String key : peerInformation.keySet()) {
                         if (!key.equals(endpoint.getOtherEndpointId()) ) {
-                            log.info("接收方接力把更新传递");
-                            log.info(peerInformation.get(key).getClass().toString());
-                            log.info(peerInformation.get(key).getOtherEndpointId());
                             peerInformation.get(key).emit(boardPathUpdate, newBoardData);
                         }
                     }
@@ -293,46 +297,34 @@ public class WhiteboardApp {
             }).on(boardDeleted, (args2) -> {
                 String newBoardData = (String) args2[0];
                 if (whiteboards.containsKey(getBoardName(newBoardData))) {
+                    log.info("Delete board: " + getBoardName(newBoardData));
                     whiteboards.remove(getBoardName(newBoardData));
                     updateComboBox(false ? getBoardName(newBoardData) : null);
                 }
-
                 for (String key : peerInformation.keySet()) {
                     if (!key.equals(endpoint.getOtherEndpointId()) ) {
-                        log.info("接收方接力把更新传递");
-                        log.info(peerInformation.get(key).getClass().toString());
-                        log.info(peerInformation.get(key).getOtherEndpointId());
                         peerInformation.get(key).emit(boardDeleted, newBoardData);
                     }
                 }
             });
 
-
             undoBtn.addActionListener(new ActionListener() {
                 public void actionPerformed(ActionEvent e) {
-                    log.info("发送方要撤销了");
-                    log.info("现在的版本号" + getBoardVersion(selectedBoard.toString()));
+                    log.info("onBoardUndo" + getBoardName(selectedBoard.toString()) + "%" + getBoardVersion(selectedBoard.toString()));
                     endpoint.emit(boardUndoUpdate, selectedBoard.toString());
                 }
             });
 
             clearBtn.addActionListener(new ActionListener() {
                 public void actionPerformed(ActionEvent e) {
-                    log.info("我真清屏了");
+                    log.info("Clear Board: " + getBoardName(selectedBoard.toString()));
                     endpoint.emit(boardClearUpdate, selectedBoard.toString());
                 }
             });
 
             drawArea.addMouseListener(new MouseAdapter() {
                 public void mouseReleased(MouseEvent e) {
-                    log.info("爷画完了");
-                    log.info("******************");
-                    log.info(getBoardData(selectedBoard.toString()));
-                    log.info(getBoardNewPath(selectedBoard.toString()));
-                    log.info("*******************\n");
-//                    endpoint.emit(boardPathUpdate, selectedBoard.toString());
                     if (selectedBoard.isShared()) {
-                        log.info("我要把shared board更新信息发送出去");
                         endpoint.emit(boardPathUpdate, selectedBoard.toString());
                     }
                 }
@@ -340,7 +332,7 @@ public class WhiteboardApp {
 
             deleteBoardBtn.addActionListener(new ActionListener() {
                 public void actionPerformed(ActionEvent e) {
-                    log.info("我真要删除了");
+                    log.info("Delete Board: " + getBoardName(selectedBoard.toString()));
                     endpoint.emit(boardDeleted, selectedBoard.toString());
                 }
             });
@@ -350,7 +342,6 @@ public class WhiteboardApp {
                     if (!modifyingCheckBox) {
                         setShare(e.getStateChange() == 1);
                         if (e.getStateChange() == ItemEvent.SELECTED) {
-                            log.info("我要share给已经连接的peer");
                             endpoint.emit(boardData, selectedBoard.toString());
                         }
 //                        if (e.getStateChange() == ItemEvent.DESELECTED) {
@@ -362,15 +353,24 @@ public class WhiteboardApp {
             });
 
         }).on(PeerManager.peerStopped, (args) -> {
-            log.info("跑这来了1");
+            Endpoint endpoint = (Endpoint) args[0];
+            log.info("peer connection stopped.");
+            log.info("Disconnected from peer: " + endpoint.getOtherEndpointId());
         }).on(PeerManager.peerError, (args) -> {
-            log.info("跑这来了2");
+            Endpoint endpoint = (Endpoint) args[0];
+            log.info("There is an error from: " + endpoint.getOtherEndpointId());
         }).on(PeerManager.peerServerManager, (args) -> {
-            log.info("跑这来了3");
+
+        }).on(IOThread.ioThread,(args) -> {
+            String peerport = (String) args[0];
+            // we don't need this info, but let's log it
+            log.info("using Internet address: " + peerport);
         });
 
         peerManager.start();
         peerManager.joinWithClientManagers();
+
+
     }
 
     public void connectToWhiteBoardServer(PeerManager peerManager, int peerport) {
@@ -378,8 +378,7 @@ public class WhiteboardApp {
             ClientManager clientManager = peerManager.connect(whiteboardServerPort, whiteboardServerHost);
             clientManager.on(PeerManager.peerStarted, (args) -> {
                 Endpoint endpoint = (Endpoint) args[0];
-                log.info("Connected to whiteboard server" + endpoint.getOtherEndpointId());
-                log.info(selectedBoard.getNameAndVersion());
+                log.info("Connecting to whiteboard server");
                 // Emitting information to the whiteboard server when I modify the shared button.
 
                 sharedCheckbox.addItemListener(new ItemListener() {
@@ -387,11 +386,9 @@ public class WhiteboardApp {
                         if (!modifyingCheckBox) {
                             setShare(e.getStateChange() == 1);
                             if (e.getStateChange() == ItemEvent.SELECTED) {
-                                log.info("我要share");
                                 endpoint.emit(WhiteboardServer.shareBoard, selectedBoard.getName());
                             }
                             if (e.getStateChange() == ItemEvent.DESELECTED) {
-                                log.info("我取消share");
                                 endpoint.emit(WhiteboardServer.unshareBoard, selectedBoard.getName());
                             }
                         }
@@ -401,22 +398,13 @@ public class WhiteboardApp {
                 // Listen for the information of sharing board from the whiteboard server.
                 endpoint.on(WhiteboardServer.sharingBoard, (args2) -> {
                     String sharingBoardName = (String) args2[0];
-                    log.info("--------onSharingBoard: " + sharingBoardName);
+                    log.info("onSharingBoard: " + sharingBoardName);
                     String connectPeerInformation = getIP(sharingBoardName) + ":" + getPort(sharingBoardName);
-                    log.info("我的信息");
-                    log.info(myHostPort);
-                    log.info("要去连接的地方");
-                    log.info(connectPeerInformation);
 
-                    for (String key : peerConnectionInfo.keySet()) {
-                        log.info("现有的connection1");
-                        log.info(key);
-                    }
 
                     if (peerConnectionInfo.containsKey(connectPeerInformation + myHostPort) || peerConnectionInfo.containsKey(myHostPort + connectPeerInformation)) {
-                        log.info("-----已经连接过了");
+
                     } else {
-                        log.info("我要去连那个peer了");
                         getBoardFromPeer(peerManager, sharingBoardName);
                     }
 
@@ -425,27 +413,30 @@ public class WhiteboardApp {
                     log.info("unSharingBoard: " + sharingBoardName);
                     whiteboards.remove(sharingBoardName);
                     updateComboBox(false ? sharingBoardName : null);
+
                 }).on(WhiteboardServer.disconnectPeer, (args2) -> {
                     String disconnectBoardName = (String) args2[0];
                     String disconnectPeerName = getIP(disconnectBoardName) + ":" + getPort(disconnectBoardName);
-                    log.info("*****");
-                    log.info(disconnectBoardName);
-                    log.info(disconnectPeerName);
-
-                    for (String key : peerConnectionInfo.keySet()) {
-                        log.info(key);
-                    }
 
                     whiteboards.remove(disconnectBoardName);
                     updateComboBox(false ? disconnectBoardName : null);
 
                     if (peerConnectionInfo.containsKey(disconnectPeerName + myHostPort)) {
-                        log.info("真断了");
                         peerConnectionInfo.get(disconnectPeerName + myHostPort).shutdown();
                         peerConnectionInfo.remove(disconnectPeerName + myHostPort);
                     }
 
                 });
+
+            }).on(PeerManager.peerStopped, (args) -> {
+                Endpoint endpoint = (Endpoint) args[0];
+                log.info("Disconnected from white board server.");
+            }).on(PeerManager.peerError, (args) -> {
+                Endpoint endpoint = (Endpoint) args[0];
+                log.info("Error from white board server.");
+            }).on(PeerManager.peerServerManager, (args) -> {
+
+            }).on(IOThread.ioThread, (args) -> {
 
             });
 
@@ -466,13 +457,7 @@ public class WhiteboardApp {
         try {
             clientManager = peerManager.connect(getPort(sharingBoardName), getIP(sharingBoardName));
             String connectPeerInformation = getIP(sharingBoardName) + ":" + getPort(sharingBoardName);
-
             peerConnectionInfo.put(connectPeerInformation + myHostPort, clientManager);
-            for (String key : peerConnectionInfo.keySet()) {
-                log.info("现有的connection2");
-                log.info(key);
-            }
-//            peerConnectionInfo.put(myHostPort, connectPeerInformation);
             clientManager.start();
         } catch (InterruptedException e) {
             e.printStackTrace();
@@ -484,71 +469,51 @@ public class WhiteboardApp {
 
         clientManager.on(PeerManager.peerStarted, (args) -> {
             Endpoint endpoint = (Endpoint) args[0];
-            log.info("Getting the shared board from the peer.");
+
             if (!whiteboards.containsKey(sharingBoardName)) {
                 endpoint.emit(getBoardData, sharingBoardName);
             }
 
-
             endpoint.on(boardData, (args2) -> {
                 String boardData = (String) args2[0];
-                log.info("收到请求的结果" + boardData);
+                log.info("onBoardData: " + boardData);
                 Whiteboard newWhiteBoard = new Whiteboard(getBoardName(boardData), true);
                 newWhiteBoard.whiteboardFromString(getBoardName(boardData), getBoardData(boardData));
                 newWhiteBoard.setShared(true);
                 addBoard(newWhiteBoard, false);
             }).on(boardUndoUpdate, (args2) -> {
-                log.info("接收方听到undo");
-
                 String newBoardData = (String) args2[0];
-                log.info("-" + getBoardVersion(whiteboards.get(getBoardName(newBoardData)).toString()));
-                log.info(whiteboards.get(getBoardName(newBoardData)).toString());
-                log.info("-" + getBoardVersion(newBoardData));
-                log.info(newBoardData);
+
                 if (getBoardVersion(whiteboards.get(getBoardName(newBoardData)).toString()) == getBoardVersion(newBoardData)) {
-                    log.info("接收方真撤回了");
+                    log.info("onBoardUndo" + getBoardName(whiteboards.get(getBoardName(newBoardData)).toString()) + "%" + getBoardVersion(whiteboards.get(getBoardName(newBoardData)).toString()));
                     whiteboards.get(getBoardName(newBoardData)).undo(whiteboards.get(getBoardName(newBoardData)).getVersion());
-                    log.info(whiteboards.get(getBoardName(newBoardData)).toString());
                     updateComboBox(false ? getBoardName(newBoardData) : null);
                 }
 
-//                if (getBoardVersion(whiteboards.get(getBoardName(newBoardData)).toString()) != getBoardVersion(newBoardData)) {
-//                    whiteboards.get(getBoardName(newBoardData)).undo(whiteboards.get(getBoardName(newBoardData)).getVersion());
-//
-//                }
-
             }).on(boardPathUpdate, (args2) -> {
-                log.info("收到更新");
                 String newBoardData = (String) args2[0];
-                log.info(newBoardData);
                 WhiteboardPath newWhiteboardPath = new WhiteboardPath(getBoardNewPath(newBoardData));
-
-                log.info("+++" + getBoardVersion(whiteboards.get(getBoardName(newBoardData)).toString()));
-                log.info("+++" + getBoardVersion(newBoardData));
-
 
                 if (whiteboards.containsKey(getBoardName(newBoardData))) {
                     if (getBoardVersion(whiteboards.get(getBoardName(newBoardData)).toString()) != getBoardVersion(newBoardData)) {
-                        log.info("接收方收到更新真的更新了board");
+                        log.info("onBoardPath" + getBoardNewPath(newBoardData));
                         whiteboards.get(getBoardName(newBoardData)).addPath(newWhiteboardPath, whiteboards.get(getBoardName(newBoardData)).getVersion());
                         updateComboBox(false ? getBoardName(newBoardData) : null);
                     }
-
                 }
 
 
             }).on(boardClearUpdate, (args2) -> {
-                log.info("听到Clear");
                 String newBoardData = (String) args2[0];
                 if (getBoardVersion(whiteboards.get(getBoardName(newBoardData)).toString()) == getBoardVersion(newBoardData)) {
+                    log.info("Clear board: " + getBoardName(newBoardData));
                     whiteboards.get(getBoardName(newBoardData)).clear(whiteboards.get(getBoardName(newBoardData)).getVersion());
                     updateComboBox(false ? getBoardName(newBoardData) : null);
                 }
             }).on(boardDeleted, (args2) -> {
-
-                log.info("本地board删除了");
                 String newBoardData = (String) args2[0];
                 if (whiteboards.containsKey(getBoardName(newBoardData))) {
+                    log.info("Delete board: " + getBoardName(newBoardData));
                     whiteboards.remove(getBoardName(newBoardData));
                     updateComboBox(false ? getBoardName(newBoardData) : null);
                 }
@@ -558,72 +523,43 @@ public class WhiteboardApp {
 
             undoBtn.addActionListener(new ActionListener() {
                 public void actionPerformed(ActionEvent e) {
-                    log.info("接收方真要撤销了");
-                    log.info("现在的版本号" + getBoardVersion(selectedBoard.toString()));
+                    log.info("onBoardUndo" + getBoardName(selectedBoard.toString()) + "%" + getBoardVersion(selectedBoard.toString()));
                     endpoint.emit(boardUndoAccepted, selectedBoard.toString());
                 }
             });
 
             clearBtn.addActionListener(new ActionListener() {
                 public void actionPerformed(ActionEvent e) {
-                    log.info("我真清屏了");
+                    log.info("Clear Board: " + getBoardName(selectedBoard.toString()));
                     endpoint.emit(boardClearAccepted, selectedBoard.toString());
                 }
             });
 
             deleteBoardBtn.addActionListener(new ActionListener() {
                 public void actionPerformed(ActionEvent e) {
-                    log.info("接收方要删除了");
+                    log.info("Delete Board: " + getBoardName(selectedBoard.toString()));
                     endpoint.emit(boardDeleted, selectedBoard.toString());
                 }
             });
 
             drawArea.addMouseListener(new MouseAdapter() {
                 public void mouseReleased(MouseEvent e) {
-                    log.info("爷画完了");
-                    log.info("******************");
-                    log.info(getBoardData(selectedBoard.toString()));
-                    log.info(getBoardNewPath(selectedBoard.toString()));
-                    log.info("*******************\n");
-                    log.info("现在的版本号" + getBoardVersion(selectedBoard.toString()));
-
-                    if (selectedBoard.isShared()) {
-                        log.info("我要把shared board更新信息发送给发送的peer出去");
-                        endpoint.emit(boardPathAccepted, selectedBoard.toString());
-                    }
+                if (selectedBoard.isShared()) {
+                    endpoint.emit(boardPathAccepted, selectedBoard.toString());
+                }
                 }
             });
 
 
         }).on(peerManager.peerStopped, (args) -> {
             Endpoint endpoint = (Endpoint) args[0];
-            log.info("Disconnected from peer: " + endpoint.getOtherEndpointId());
+//            log.info("Disconnected from peer: " + endpoint.getOtherEndpointId());
+//            log.info("peer connection stopped.");
         });
 
 
     }
 
-    public void uploadSharingBoard(String shareBoardName, PeerManager peerManager, String peerport) throws InterruptedException, UnknownHostException {
-        ClientManager clientManager = peerManager.connect(whiteboardServerPort, whiteboardServerHost);
-        log.info("跑到这没");
-        log.info("1 " + whiteboardServerPort);
-        log.info(whiteboardServerHost);
-        clientManager.on(PeerManager.peerStarted, (args) -> {
-            Endpoint endpoint = (Endpoint) args[0];
-            log.info("连上了");
-        }).on(ServerManager.sessionStarted, (args) -> {
-            log.info("连上了");
-        });
-
-    }
-
-    public void startTransmittingBoard(String sharedBoardName, Endpoint endpoint) {
-
-    }
-
-    private void shareBoards(Whiteboard sharedBoard, int peerPort, Endpoint endpoint) {
-
-    }
 
     /**
      * ****
@@ -730,7 +666,6 @@ public class WhiteboardApp {
      */
     public void waitToFinish() {
 
-        log.info("gui被关了");
     }
 
     /**
@@ -784,10 +719,9 @@ public class WhiteboardApp {
             if (!selectedBoard.addPath(currentPath, selectedBoard.getVersion())) {
                 // some other peer modified the board in between
                 drawSelectedWhiteboard(); // just redraw the screen without the path
-                log.info("我画了一笔");
+
             } else {
                 // was accepted locally, so do remote stuff if needed
-                log.info("我画了一笔");
             }
         } else {
             log.severe("path created without a selected board: " + currentPath);
@@ -860,7 +794,6 @@ public class WhiteboardApp {
      */
     public void guiShutdown() {
         // do some final cleanup
-        log.info("我要关闭了");
         HashSet<Whiteboard> existingBoards = new HashSet<>(whiteboards.values());
 
 
@@ -870,7 +803,6 @@ public class WhiteboardApp {
 
 
         existingBoards.forEach((board) -> {
-            log.info("-----" + board.getName());
             deleteBoard(board.getName());
         });
 
@@ -880,11 +812,14 @@ public class WhiteboardApp {
 //        }
 
 
+        try {
+            peerManager.shutdown();
+        } catch (Exception e) {
+        }
 
-        peerManager.shutdown();
 
         whiteboards.values().forEach((whiteboard) -> {
-            log.info("这个是干嘛的");
+
         });
     }
 
