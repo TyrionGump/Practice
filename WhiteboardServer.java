@@ -150,22 +150,14 @@ public class WhiteboardServer {
             Endpoint endpoint = (Endpoint) eventArgs[0];
             peerInformation.put(endpoint.getOtherEndpointId(), endpoint);
 
-            log.info("一连上找人要板");
-            log.info("" + sharedBoards.size());
             for (String key : sharedBoards.keySet()) {
                 endpoint.emit(sharingBoard, key);
             }
-
-
 
             log.info("Client session started: " + endpoint.getOtherEndpointId());
             endpoint.on(shareBoard, (eventArgs2) -> {
                 String sharedBoardName = (String) eventArgs2[0];
                 sharedBoards.put(sharedBoardName, endpoint);
-
-                for (String key : sharedBoards.keySet()) {
-                    log.info("sdsadsdsd" + sharedBoards.get(key));
-                }
 
                 log.info("Received share request: " + sharedBoardName);
 
@@ -178,8 +170,8 @@ public class WhiteboardServer {
             }).on(unshareBoard, (eventArgs4) -> {
 
                 String unsharedBoardName = (String) eventArgs4[0];
-                log.info("received unshare board" + unsharedBoardName);
-//                log.info("******" + unsharedBoardName);
+                log.info("received unshare request: " + unsharedBoardName);
+
                 sharedBoards.remove(unsharedBoardName);
 
                 for (String key : peerInformation.keySet()) {
@@ -188,8 +180,8 @@ public class WhiteboardServer {
                     }
                 }
             }).on(error, (eventArgs5) -> {
-                log.info("error??????????????????");
-                endpoint.emit(error, "what the fuck????????????????????");
+                Endpoint endpoint1 = (Endpoint) eventArgs5[0];
+                log.info("There is an error from: " + endpoint1.getOtherEndpointId());
             });
 
         }).on(ServerManager.sessionStopped, (eventArgs) -> {
@@ -209,21 +201,12 @@ public class WhiteboardServer {
                 sharedBoards.remove(key);
 
                 for (String key2 : peerInformation.keySet()) {
-                    log.info("&&&&&&&");
-                    log.info(key);
-                    log.info(key2);
                     if (!key2.equals(endpoint.getOtherEndpointId())) {
-                        log.info("真传了");
                         peerInformation.get(key2).emit(disconnectPeer, key);
                     }
                 }
             }
 
-
-
-            for (String key : peerInformation.keySet()) {
-
-            }
 
         }).on(ServerManager.sessionError, (eventArgs) -> {
             Endpoint endpoint = (Endpoint) eventArgs[0];
